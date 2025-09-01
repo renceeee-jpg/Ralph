@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Simple Tank Wars</title>
+<style>
+  body {
+    background: #222;
+    color: #eee;
+    font-family: monospace;
+    text-align: center;
+    margin: 0;
+    overflow: hidden;
+  }
+  canvas {
+    background: #444;
+    display: block;
+    margin: 20px auto;
+    border: 2px solid #eee;
+  }
+  #info {
+    margin-top: 0;
+  }
+</style>
+</head>
+<body>
+<h1>Simple Tank Wars</h1>
+<p id="info">Player 1: A/D to move, W to shoot | Player 2: Left/Right arrows to move, Up arrow to shoot</p>
+<canvas id="gameCanvas" width="600" height="300"></canvas>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+
+  // Tank properties
+  const tankWidth = 40;
+  const tankHeight = 20;
+  const turretHeight = 10;
+  const moveSpeed = 3;
+  const bulletSpeed = 5;
+  const groundY = canvas.height - 30;
+
+  // Players
+  const players = [
+    {
+      x: 50,
+      y: groundY - tankHeight,
+      color: 'lime',
+      leftKey: 'a',
+      rightKey: 'd',
+      shootKey: 'w',
+      bullets: [],
+      score: 0,
+      direction: 1,  // direction tank faces (1 = right)
+    },
+    {
+      x: canvas.width - 90,
+      y: groundY - tankHeight,
+      color: 'cyan',
+      leftKey: 'ArrowLeft',
+      rightKey: 'ArrowRight',
+      shootKey: 'ArrowUp',
+      bullets: [],
+      score: 0,
+      direction: -1,  // faces left
+    }
+  ];
+
+  // Key state
+  const keysPressed = {};
+
+  // Listen for key events
+  window.addEventListener('keydown', e => {
+    keysPressed[e.key] = true;
+  });
+  window.addEventListener('keyup', e => {
+    keysPressed[e.key] = false;
+  });
+
+  // Draw a tank
+  function drawTank(x, y, color, direction) {
+    ctx.fillStyle = color;
+    // Body
+    ctx.fillRect(x, y, tankWidth, tankHeight);
+    // Turret
+    if (direction === 1) {
+      // turret facing right
+      ctx.fillRect(x + tankWidth - 5, y - turretHeight, 15, turretHeight);
+    } else {
+      // turret facing left
+      ctx.fillRect(x - 10, y - turretHeight, 15, turretHeight);
+    }
+    // Wheels (circles)
+    ctx.fillStyle = 'black';
+    for(let i = 0; i < 4; i++) {
+      ctx.beginPath();
+      ctx.arc(x + 8 + i*8, y + tankHeight, 6, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // Draw bullet
+  function drawBullet(bullet) {
+    ctx.fillStyle = 'yellow';
+    ctx.beginPath();
+    ctx.arc(bullet.x, bullet.y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // Update game state
+  function update() {
+    // Move tanks
+    players.forEach(player => {
+      if (keysPressed[player.leftKey]) {
+        player.x -= moveSpeed;
+        if(player.x < 0) player.x = 0;
+        player.direction = -1;
+      }
+      if (keysPressed[player.rightKey]) {
+        player.x += moveSpeed;
+        if(player.x > canvas.width - tankWidth) player.x = canvas.width - tankWidth;
+        player.direction = 1;
+      }
+      // Shoot bullet on key press (one bullet per key down)
+      if (keysPressed[player.shootKey] && !player.shootCooldown) {
+        // Create bullet at turret tip
+        const bulletX = player.direction === 1 ? player.x + tankWidth + 5 : player.x - 5;
+        player.bullets.push({ x: bulletX, y: player.y - turretHeight/2, direction: player.direction });
+        player.shootCooldown = 15; // frames cooldown
+      }
+      if (player.shootCooldown) player.shootCooldown--;
+    });
+
+    // Update bullets
+    players.forEach((player, idx) => {
+      player.bullets.forEach((bullet, bidx) => {
+        bullet.x += bullet.direction * bulletSpeed;
+
+        // Check collision with other player tank
+        const otherPlayer = players[1 - idx];
+        if (
+          bullet.x > otherPlayer.x &&
+          bullet.x < otherPlayer.x + tankWidth &&
+          bullet.y > otherPlayer.y &&
+          bullet.y < otherPlayer.y + tankHeight + turretHeight
+        ) {
+          // Hit!
+          players[idx].score++;
+          // Remove bullet
+          player.bullets.splice(bidx, 1);
+          alert(`Player ${idx+1} hit Player ${2 - idx}! Score: P1-${players[0].score} | P2-${players[1].score}`);
+          resetPositions();
+        }
+
+        // Remove bullet if off screen
+        if (bullet.x < 0 || bullet.x > canvas.width) {
+          player.bullets.splice(bidx, 1);
+        }
+      });
+    });
+  }
+
+  // Reset tanks to start positions
+  function resetPositions() {
+    players[0].x = 50;
+    players[0].y = groundY - tankHeight;
+    players[0].bullets = [];
+    players[1].x = canvas.width - 90;
+    players[1].y = groundY - tankHeight;
+    players[1].bullets = [];
+  }
+
+  // Draw everything
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // Draw ground
+    ctx.fillStyle = '#666';
+    ctx.fillRect(0, groundY, canvas.width, canvas.height - groundY);
+
+    // Draw tanks
+    players.forEach(player => {
+      drawTank(player.x, player.y, player.color, player.direction);
+    });
+
+    // Draw bullets
+    players.forEach(player => {
+      player.bullets.forEach(drawBullet);
+    });
+
+    // Draw scores
+    ctx.fillStyle = 'white';
+    ctx.font = '18px monospace';
+    ctx.fillText(`Player 1: ${players[0].score}`, 10, 20);
+    ctx.fillText(`Player 2: ${players[1].score}`, canvas.width - 130, 20);
+  }
+
+  // Game loop
+  function gameLoop() {
+    update();
+    draw();
+    requestAnimationFrame(gameLoop);
+  }
+
+  resetPositions();
+  gameLoop();
+</script>
+</body>
+</html>
